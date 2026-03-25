@@ -99,7 +99,7 @@ products.json encontrado. Usar cache? (s/n):
 Após carregar o catálogo, a interface de busca é exibida:
 
 ```
-=== Busca de Tênis Adidas ===
+=== Busca de Produtos Adidas ===
   Preço exato  → ex: 799.99
   Range        → ex: 400 900
   Sair         → q
