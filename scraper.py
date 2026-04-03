@@ -1,22 +1,15 @@
 import time
 import json
-import subprocess
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.expected_conditions import staleness_of
 from webdriver_manager.chrome import ChromeDriverManager
-from typing import Optional
 
 URL = "https://www.adidas.com.br/tenis-homem"
-
-SEL_PRODUCT   = "article[data-testid='plp-product-card']"
-SEL_NEXT_PAGE = "a[data-testid='pagination-next-button']" 
-SEL_TOTAL_PAG = "[data-testid='pagination-pages-count']"      
-
+SEL_PRODUCT = "article[data-testid='plp-product-card']"
 
 def init_driver():
     opts = Options()
@@ -27,212 +20,99 @@ def init_driver():
     opts.add_argument("--disable-blink-features=AutomationControlled")
     opts.add_experimental_option("excludeSwitches", ["enable-automation"])
     opts.add_experimental_option("useAutomationExtension", False)
-    opts.add_argument(
-        "user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    )
-    driver = webdriver.Chrome(
-        service=Service(ChromeDriverManager().install()), options=opts
-    )
-    driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
-        "source": "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
-    })
+    opts.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+    
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=opts)
     return driver
 
-
-import re
-
-def parse_price(raw: str) -> Optional[float]:
-    if not raw:
-        return None
-    # Extrai o PRIMEIRO número no formato brasileiro: 1.999,99
-    match = re.search(r'[\d]+(?:\.\d{3})*,\d{2}', raw.replace("\xa0", " "))
-    if not match:
-        return None
+def parse_price(price_str):
     try:
-        return float(match.group().replace(".", "").replace(",", "."))
-    except ValueError:
+        clean_str = price_str.upper().replace("R$", "").strip()
+        clean_str = clean_str.replace(".", "")
+        clean_str = clean_str.replace(",", ".")
+        return float(clean_str)
+    except:
         return None
-def get_price_element(card):
-    for sel in [
-        "[data-testid='main-price'] span:last-child",
-        "[data-testid='main-price']",
-        "[data-testid='sale-price']",
-        "[class*='gl-price']",
-    ]:
-        try:
-            return card.find_element(By.CSS_SELECTOR, sel).get_attribute("innerText").strip()
-        except Exception:
-            continue
-    return None
 
-def get_total_pages(driver) -> int:
-    """Tenta ler o total de páginas do DOM; fallback para 26."""
-    try:
-        el = driver.find_element(By.CSS_SELECTOR, SEL_TOTAL_PAG)
-        
-        text = el.get_attribute("innerText")
-        return int(text.strip().split()[-1])
-    except Exception:
-        print("  Não conseguiu detectar total de páginas — usando 26.")
-        return 26
-
-
-def scrape_page(driver, wait) -> list[dict]:
-    """Extrai produtos da página atual."""
-    wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, SEL_PRODUCT)))
-
-    # Scroll suave para forçar render dos textos
-    for _ in range(4):
-        driver.execute_script("window.scrollBy(0, 900)")
-        time.sleep(0.5)
-    driver.execute_script("window.scrollTo(0, 0)")
-    time.sleep(0.3)
-
-    cards = driver.find_elements(By.CSS_SELECTOR, SEL_PRODUCT)
-    products = []
-
-    for idx, card in enumerate(cards, start=1):
-        try:
-            name = card.find_element(
-                By.CSS_SELECTOR, "[data-testid='product-card-title']"
-            ).get_attribute("innerText").strip()
-
-            price_raw = get_price_element(card)
-
-            price = parse_price(price_raw) if price_raw else None
-
-            if name and price:
-                products.append({"name": name, "price": price})
-            else:
-                print(f"    [Card {idx}] Parse falhou — nome='{name}' preço='{price_raw}'")
-
-        except Exception as e:
-            print(f"    [Card {idx}] Erro: {e}")
-
-    return products
-
-
-def wait_for_new_page(driver, wait, old_first_card):
-    """
-    Espera o card antigo ficar stale (DOM trocou) e os novos cards aparecerem.
-    Mais confiável que sleep fixo.
-    """
-    try:
-        wait.until(staleness_of(old_first_card))
-    except Exception:
-        pass  
-    wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, SEL_PRODUCT)))
-
-
-def scrape_all() -> list[dict]:
+def scrape_all():
     driver = init_driver()
-    wait   = WebDriverWait(driver, 20)
-    all_products = []
-    next_id = 1
-
+    products = []
+    global_id = 0
+    
+    print(f"A aceder a {URL} ...")
+    driver.get(URL)
+    
     try:
-        driver.get(URL)
-        # Espera a primeira página carregar para ler o total
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, SEL_PRODUCT)))
-        total_pages = get_total_pages(driver)
-        print(f"  Total de páginas detectado: {total_pages}\n")
-
-        for page in range(1, total_pages + 1):
-            print(f"  Raspando página {page}/{total_pages}...")
-
-            page_products = scrape_page(driver, wait)
-
-            for p in page_products:
-                p["id"] = next_id
-                next_id += 1
-
-            all_products.extend(page_products)
-            print(f"    {len(page_products)} produtos extraídos | Total acumulado: {len(all_products)}")
-
-            if page >= total_pages:
-                break
-
-            # Captura referência ao primeiro card ANTES de clicar
+        WebDriverWait(driver, 15).until(
+            EC.presence_of_all_elements_located((By.CSS_SELECTOR, SEL_PRODUCT))
+        )
+        
+        print("Cartões encontrados! A rolar a página para forçar o carregamento de imagens e preços...")
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight/2);")
+        time.sleep(3)
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(3)
+        
+        product_cards = driver.find_elements(By.CSS_SELECTOR, SEL_PRODUCT)
+        print(f"Encontrados {len(product_cards)} ténis na página. A extrair dados...")
+        
+        for idx, card in enumerate(product_cards):
             try:
-                old_first_card = driver.find_elements(By.CSS_SELECTOR, SEL_PRODUCT)[0]
-            except IndexError:
-                old_first_card = None
+                try:
+                    img_el = card.find_element(By.CSS_SELECTOR, "img")
+                    image_url = img_el.get_attribute("src")
+                except:
+                    image_url = ""
+                
+                raw_text = card.get_attribute("innerText")
+                lines = [line.strip() for line in raw_text.split('\n') if line.strip()]
+                
+                name = ""
+                price_raw = ""
+                
+                # Lista de bloqueio para não apanharmos botões escondidos
+                ignore_list = ["novo", "novidade", "exclusivo", "sustentável", "membros", "adicionar à lista de desejos", "esgotado"]
+                
+                for line in lines:
+                    line_lower = line.lower()
+                    if "r$" in line_lower and not price_raw:
+                        price_raw = line
+                    elif len(line) > 5 and not name and "r$" not in line_lower:
+                        if line_lower not in ignore_list and "cores" not in line_lower:
+                            name = line
 
-            try:
-                btn = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, SEL_NEXT_PAGE)))
-                driver.execute_script("arguments[0].click();", btn)
+                if not name or not price_raw:
+                    continue
+                    
+                price_val = parse_price(price_raw)
 
-                if old_first_card:
-                    wait_for_new_page(driver, wait, old_first_card)
-                else:
-                    time.sleep(2)
-
+                if price_val is not None:
+                    global_id += 1
+                    products.append({
+                        "name": name,
+                        "price": price_val,
+                        "id": global_id,
+                        "image_url": image_url
+                    })
+                    
             except Exception as e:
-                print(f"  Botão próxima página não encontrado na página {page}: {e}")
-                print("  Encerrando paginação.")
-                break
+                continue
 
     finally:
         driver.quit()
-
-    return all_products
-
-def call_ruby(products: list[dict], price_min: float, price_max: Optional[float]) -> str:
-    payload = json.dumps({
-        "products":  products,
-        "price_min": price_min,
-        "price_max": price_max if price_max is not None else price_min
-    })
-    result = subprocess.run(
-        ["ruby", "search.rb"],
-        input=payload,
-        capture_output=True,
-        text=True
-    )
-    return result.stdout.strip()
-
+        
+    return products
 
 if __name__ == "__main__":
-    import os
-
-    # Se já existe products.json, oferece reaproveitar
-    if os.path.exists("products.json"):
-        resp = input("products.json encontrado. Usar cache? (s/n): ").strip().lower()
-        if resp == "s":
-            with open("products.json", encoding="utf-8") as f:
-                products = json.load(f)
-            print(f"  {len(products)} produtos carregados do cache.")
-        else:
-            products = scrape_all()
+    print("Iniciando o scraper. Isso pode demorar alguns instantes...")
+    extracted_products = scrape_all()
+    
+    if extracted_products:
+        filename = "products-example.json" 
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(extracted_products, f, ensure_ascii=False, indent=2)
+            
+        print(f"\nSucesso! {len(extracted_products)} produtos salvados no arquivo '{filename}'.")
     else:
-        products = scrape_all()
-
-    print(f"\nTotal: {len(products)} produtos.\n")
-
-    # Loop de busca — permite várias consultas sem re-raspar
-    while True:
-        print("=== Busca de Tênis Adidas ===")
-        print("  Preço exato  → ex: 799.99")
-        print("  Range        → ex: 400 900")
-        print("  Sair         → q\n")
-
-        raw = input("Preço: ").strip()
-        if raw.lower() == "q":
-            break
-
-        try:
-            parts = raw.split()
-            if len(parts) == 1:
-                price_min, price_max = float(parts[0]), None
-            elif len(parts) == 2:
-                price_min, price_max = float(parts[0]), float(parts[1])
-            else:
-                print("Entrada inválida.\n")
-                continue
-
-            output = call_ruby(products, price_min, price_max)
-            print("\n" + output + "\n")
-
-        except ValueError:
-            print("Digite números válidos.\n")
+        print("\nNenhum produto extraído.")

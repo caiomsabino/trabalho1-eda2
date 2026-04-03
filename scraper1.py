@@ -56,6 +56,19 @@ def parse_price(raw: str) -> Optional[float]:
     except ValueError:
         return None
 
+def get_price_element(card):
+    for sel in [
+        "[data-testid='main-price'] span:last-child",
+        "[data-testid='main-price']",
+        "[data-testid='sale-price']",
+        "[class*='gl-price']",
+    ]:
+        try:
+            return card.find_element(By.CSS_SELECTOR, sel).get_attribute("innerText").strip()
+        except Exception:
+            continue
+    return None
+
 def scrape_first_page() -> list[dict]:
     driver = init_driver()
     wait = WebDriverWait(driver, 20)
@@ -63,22 +76,22 @@ def scrape_first_page() -> list[dict]:
 
     try:
         driver.get(URL)
-        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "article[data-testid='plp-product-card']")))
+        wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, SEL_PRODUCT)))
 
         # Scroll para garantir que o JS renderize os textos
         for _ in range(3):
             driver.execute_script("window.scrollBy(0, 800)")
             time.sleep(0.7)
 
-        cards = driver.find_elements(By.CSS_SELECTOR, "article[data-testid='plp-product-card']")
+        cards = driver.find_elements(By.CSS_SELECTOR, SEL_PRODUCT)
         print(f"  {len(cards)} cards encontrados. Extraindo dados...")
 
         for idx, card in enumerate(cards, start=1):
             try:
                 # USANDO innerText EM VEZ DE .text
                 name = card.find_element(By.CSS_SELECTOR, "[data-testid='product-card-title']").get_attribute("innerText").strip()
-                price_raw = card.find_element(By.CSS_SELECTOR, "[data-testid='main-price']").get_attribute("innerText").strip()
-                price = parse_price(price_raw)
+                price_raw = get_price_element(card)
+                price = parse_price(price_raw) if price_raw else None
 
                 if name and price:
                     products.append({"id": idx, "name": name, "price": price})
@@ -128,6 +141,8 @@ def call_ruby(products: list[dict], price_min: float, price_max: Optional[float]
 if __name__ == "__main__":
     print("Carregando primeira página...")
     products = scrape_first_page()
+    with open("products.json", "w", encoding="utf-8") as f:
+        json.dump(products, f, indent=2)
     print(f"  {len(products)} produtos carregados.\n")
 
     price_min, price_max = ask_user()
