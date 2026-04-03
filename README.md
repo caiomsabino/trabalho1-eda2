@@ -1,158 +1,105 @@
-# Trabalho 1 EDA2 - Prof. Maurício
-## Adidas E-commerce Scraper com Busca Indexada
+# Trabalho 1 — EDA2
+## Motor de Busca E-commerce com Índice Invertido e Interface Web
 
-Projeto de web scraping e busca indexada desenvolvido para a disciplina de Estruturas de Dados e Algoritmos 2. O sistema raspa produtos do e-commerce da Adidas Brasil, armazena os dados em JSON e realiza buscas por faixa de preço usando uma busca sequencial indexada de dois níveis implementado em Ruby.
+Projeto desenvolvido para a disciplina de Estruturas de Dados e Algoritmos 2. O sistema implementa uma engine de busca para o catálogo da Adidas Brasil, combinando Índice Invertido (Hash) para texto e Busca Sequencial Indexada para preço, tudo servido por uma interface web em Flask.
 
----
+## Destaques
 
-## Visão Geral da Arquitetura
+- Busca textual rápida por nome usando Índice Invertido (Hash)
+- Busca por faixa de preço com índice em dois níveis
+- Interseção de resultados por nome e preço usando Set
+- Interface web simples e responsiva com Flask + HTML
+- Engine principal em Ruby para processamento eficiente dos dados
 
-```
-scraper.py   →   products.json   →   search.rb
-(Selenium)        (cache local)     (busca indexada)
-```
+## Estruturas de dados e algoritmos
 
-- **`scraper.py`** — Selenium scraper que percorre todas as páginas de uma categoria, extrai nome e preço de cada produto e salva em `products.json`.
-- **`search.rb`** — Recebe o JSON via stdin, constrói um índice de dois níveis (blocos de 10) sobre o catálogo ordenado por preço e executa busca binária em O(log n) para filtrar por preço exato ou range.
-- **`products.json`** — Cache local gerado pelo scraper. Na próxima execução, o programa pergunta se deseja reutilizá-lo, evitando raspar novamente.
+### 1) Índice invertido (Tabela Hash)
 
----
+Cada nome de produto é tokenizado; cada termo vira uma chave de Hash cujo valor é a lista de IDs que contém aquela palavra. Isso reduz a busca textual para tempo médio de acesso em Hash.
 
-## Estrutura de Arquivos
+### 2) Busca sequencial indexada (dois níveis)
 
-```
+Para buscas por preço exato ou intervalo, o catálogo é ordenado e indexado em dois níveis. A busca usa binária no índice secundário, refina no primário e varre apenas o bloco necessário.
+
+### 3) Interseção de conjuntos (Set)
+
+Quando o usuário combina nome e preço, as listas retornadas são intersectadas via Set para acelerar a filtragem final.
+
+## Estrutura do projeto
+
+```text
 .
-├── scraper.py        # Scraper + interface de busca
-├── search.rb         # Engine de busca indexada
-├── products.json     # Cache gerado automaticamente
-├── requirements.txt  # Dependências dos projetos
-└── README.md
+├── app.py                # Servidor Web (Flask)
+├── scraper.py            # Scraper principal (gera products.json)
+├── scraper1.py           # Scraper alternativo (gera products-example.json)
+├── search.rb             # Engine com estruturas de dados
+├── products-example.json # Cache de dados já incluído
+├── requirements.txt      # Dependências Python
+├── README.md
+└── templates/
+    └── index.html        # Interface do usuário
 ```
-
-### Observações
-
-- O `scraper1.py` faz parte dos testes, ele no caso busca apenas na primeira página e aplica a busca sequencial indexada sobre os produtos encontrados.
-- No repositório tem-se um arquivo JSON chamado `products-example.json`, em que contém o conteúdo gerado pelo webscrapping da URL original. 
-
----
 
 ## Pré-requisitos
 
 - Python 3.11+
-- Ruby 3.x
+- Ruby 3.x (no PATH do sistema operacional)
 - Google Chrome instalado
-
----
 
 ## Instalação
 
-### 1. Clone o repositório
-
 ```bash
-git clone <url-do-repositorio>
-cd <nome-da-pasta>
-```
+python -m venv .venv
 
-### 2. Crie e ative o ambiente virtual Python
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
 
-```bash
-# Criar o venv
-python3 -m venv venv
+# macOS/Linux
+source .venv/bin/activate
 
-# Ativar — macOS/Linux
-source venv/bin/activate
-
-# Ativar — Windows
-venv\Scripts\activate
-```
-
-### 3. Instale as dependências Python
-
-```bash
 pip install -r requirements.txt
 ```
 
-> O `webdriver-manager` baixa automaticamente o ChromeDriver compatível com sua versão do Chrome — não precisa instalar manualmente.
+## Geração de dados
 
-### 4. Verifique o Ruby
+Você pode usar o cache pronto ou executar o scraper.
 
-```bash
-ruby --version  # deve retornar 3.x
-```
+### Opção A: usar o cache já incluído
 
-Nenhuma gem externa é necessária — o `search.rb` usa apenas a stdlib.
+O projeto já acompanha `products-example.json`. Basta iniciar a aplicação.
 
----
+### Opção B: gerar dados atualizados
 
-## Como Executar
+Apague o arquivo `products-example.json`
+
+#### Execute o scraper
 
 ```bash
 python scraper.py
 ```
 
-Na primeira execução, o scraper percorrerá todas as páginas da categoria configurada. Nas execuções seguintes, se `products.json` já existir, o programa pergunta:
+Esse script gera `products-example.json`, que é utilizado para as buscas. 
 
-```
-products.json encontrado. Usar cache? (s/n):
-```
-
-Após carregar o catálogo, a interface de busca é exibida:
-
-```
-=== Busca de Produtos Adidas ===
-  Preço exato  → ex: 799.99
-  Range        → ex: 400 900
-  Sair         → q
-```
-
-Os resultados são processados pelo `search.rb` e exibidos no terminal.
-
----
-
-## Trocando a Categoria (URL)
-
-Para raspar uma categoria diferente do site da Adidas, basta alterar a constante `URL` no topo do `scraper.py`:
-
-```python
-# scraper.py — linha ~12
-
-# Tênis masculino (padrão)
-URL = "https://www.adidas.com.br/tenis-homem"
-
-# Outros exemplos:
-URL = "https://www.adidas.com.br/tenis-mulher"
-URL = "https://www.adidas.com.br/chuteiras"
-URL = "https://www.adidas.com.br/roupas-homem"
-URL = "https://www.adidas.com.br/calcados-infantis"
-```
-
-> Acesse o site da Adidas, navegue até a aba desejada e copie a URL da barra de endereços. O script de paginação funciona para qualquer categoria, pois a Adidas usa o padrão `?start=N&sz=48` em todas elas. Lembrando que a aba pode possuir **apenas** produtos.
-
-Após trocar a URL, **delete o `products.json`** para forçar um novo scraping:
+## Executar a aplicação
 
 ```bash
-rm products.json
-python scraper.py
+python app.py
 ```
 
----
+Abra http://127.0.0.1:5000 no navegador.
 
-## Como a Busca Indexada Funciona
+## Como usar
 
-O `search.rb` implementa um índice de dois níveis sobre o catálogo ordenado por preço:
-
-| Nível | Estrutura | Tamanho do bloco |
-|-------|-----------|-----------------|
-| 1     | Índice primário sobre o catálogo | 10 produtos |
-| 2     | Índice secundário sobre o índice primário | 10 entradas |
-
-A busca usa **busca binária nos dois indíces**: primeiro localiza o bloco no índice 2, depois refina no índice 1, e só então faz a varredura linear no trecho relevante do catálogo — reduzindo drasticamente o número de comparações em catálogos grandes.
-
----
+- Nome: digite termos como “Samba”, “Ultraboost” ou parte do nome
+- Preço: informe mínimo e máximo (intervalo) ou deixe em branco para ver tudo, também é possível informar apenas um dos valores para que possa ver os produtos a partir do mínimo ou até o máximo.
 
 ## Observações
 
-- O scraper roda em modo **headless** (sem abrir janela do navegador).
-- Um `time.sleep` mínimo entre páginas é mantido para não sobrecarregar o servidor.
-- Produtos sem preço detectável são logados no terminal e ignorados no JSON.
-- O campo `id` é sequencial e único entre todas as páginas raspadas.
+- O servidor envia um payload JSON para o Ruby via subprocesso e recebe o resultado filtrado em um único ciclo de execução.
+- O campo `image_url` é usado apenas para renderização na interface, não influencia o processamento das buscas.
+
+## Problemas comuns
+
+- Ruby não encontrado: verifique se o Ruby 3.x está instalado e no PATH.
+- Erros no Selenium/Chrome: atualize o Chrome e tente novamente; o driver é gerenciado pelo webdriver-manager.
+- Bloqueio do site: execute o scraper novamente ou use o `products-example.json`.
