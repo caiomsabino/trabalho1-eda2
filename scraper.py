@@ -109,7 +109,7 @@ if __name__ == "__main__":
     extracted_products = scrape_all()
     
     if extracted_products:
-        filename = "products-example.json" 
+        filename = "products.json" 
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(extracted_products, f, ensure_ascii=False, indent=2)
             
